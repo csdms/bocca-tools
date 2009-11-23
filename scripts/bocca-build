@@ -1,0 +1,84 @@
+#! /bin/env python2.6
+
+import subprocess
+import os
+import sys
+import shutil
+import optparse
+import tarfile
+import commands
+import tempfile
+
+import bocca.bocca_xml
+
+usage = "usage: make_proj [options] file"
+parser = optparse.OptionParser (usage=usage)
+parser.add_option ("-C", "--directory", dest="rundir",
+                   help="change to directory, then execute",
+                   default=".")
+parser.add_option ("-S", "--srcdir", dest="srcdir",
+                   help="location of source files to import",
+                   default=".")
+parser.add_option ("-D", "--destdir", dest="dstdir",
+                   help="location to create project",
+                   default=".")
+parser.add_option ("-T", "--tmpdir", dest="tmpdir",
+                   help="location of temporary directory",
+                   default=None)
+parser.add_option ("-b", "--bocca", dest="bocca",
+                   help="bocca command to use",
+                   default="bocca")
+parser.add_option ('-n', "--dry-run",
+                   action='store_true', dest='dry_run', default=False,
+                   help="Do a dry run (don't actually do anything)")
+parser.add_option ('-p', "--print-tree",
+                   action='store_true', dest='print_tree', default=False,
+                   help="Print a tree of what will be built")
+
+(options, args) = parser.parse_args ()
+
+if len (args)<1:
+  parser.error ("no project file")
+build_file = args[0]
+
+(status, output) = commands.getstatusoutput (options.bocca + ' --version')
+if status != 0:
+  sys.exit ("{0}: unable to execute".format (options.bocca))
+
+rundir = os.path.abspath (options.rundir)
+try:
+  os.chdir (rundir)
+except IOError as (errno, strerror):
+  os.exit ("I/O error ({0}): {1}".format (errno, strerror))
+
+build_file = os.path.abspath (build_file)
+
+srcdir = os.path.abspath (options.srcdir)
+dstdir = os.path.abspath (options.dstdir)
+
+try:
+  os.chdir (dstdir)
+except OSError:
+  sys.exit ("{0}: Error moving to build directory".format (dstdir))
+
+p = bocca.bocca_xml.parse_file (build_file, srcdir=srcdir)
+
+if os.path.isdir (os.path.join (dstdir, p.name ())):
+  if os.path.samefile (srcdir, os.path.join (dstdir, p.name ())):
+    print "{0}: Source and destination are the same".format (srcdir)
+    tmpdir = os.path.abspath (options.tmpdir)
+    if tmpdir is None:
+      tmpdir = tempfile.mkdtemp (prefix='bocca')
+    print "{0}: Moving source".format (tmpdir)
+    shutil.move (srcdir, tmpdir)
+    srcdir = os.path.join (tmpdir, p.name ())
+
+if options.print_tree:
+  print p
+  sys.exit (0)
+
+if options.dry_run:
+  p.dry_run ()
+else:
+  p.run ()
+

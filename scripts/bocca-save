@@ -1,0 +1,64 @@
+#! /bin/env python
+
+import subprocess
+import os
+import sys
+import shutil
+import optparse
+import tarfile
+
+parser = optparse.OptionParser ()
+parser.add_option ("-C", "--directory", dest="project_dir",
+                   help="change to directory, then execute",
+                   default=".")
+parser.add_option ("-D", "--dest", dest="dest_dir",
+                   help="destination to copy files to",
+                   default="./save")
+parser.add_option ("-a", "--archive", dest="archive",
+                   help="Create archive",
+                   default=None)
+parser.add_option ("-b", "--bocca", dest="bocca",
+                   help="bocca command",
+                   default='bocca')
+
+(options, args) = parser.parse_args ()
+project_dir = options.project_dir
+dest_dir = options.dest_dir
+archive = options.archive
+
+try:
+  os.chdir (project_dir)
+except OSError as err:
+  print ('%s' % err.strerror)
+  sys.exit (1)
+
+bocca = options.bocca
+
+p = subprocess.Popen(bocca + ' display project -f', shell=True,
+                     stdout=subprocess.PIPE,
+                     stderr=subprocess.PIPE)
+p.wait ()
+
+(stdout, stderr) = p.communicate ()
+if p.poll ()==0:
+  files = stdout.split ()
+  prefix = os.path.commonprefix (files)
+  for file in files:
+    from_file = file[len(prefix):]
+    to_file = os.path.join (dest_dir, from_file)
+    if not os.path.exists (os.path.dirname (to_file)):
+      shutil.copytree (os.path.dirname(file), os.path.dirname(to_file))
+    shutil.copyfile (file, to_file)
+
+  print "Copied %d files" % len (files)
+
+  if archive is not None:
+    print "Creating archive %s" % archive
+    tar = tarfile.open (archive, "w:gz")
+    tar.add (os.path.abspath (dest_dir))
+    tar.close ()
+else:
+  print ('%s: Error running bocca'  % bocca)
+  print ('%s' % stderr)
+  sys.exit (1)
+
