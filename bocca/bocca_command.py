@@ -71,9 +71,11 @@ def build_options (obj):
 def import_options (obj, prefix=''):
   s = []
   if obj.impl_dir () is not None:
-    s.append (prepend_symbols ('--import-impl=', impl_import (obj, prefix)))
+    if os.path.isdir (obj.impl_dir (prefix)):
+      s.append (prepend_symbols ('--import-impl=', impl_import (obj, prefix)))
   if obj.sidl_file () is not None:
-    s.append (prepend_symbols ('--import-sidl=', sidl_import (obj, prefix)))
+    if os.path.isfile (obj.sidl_file (prefix)):
+      s.append (prepend_symbols ('--import-sidl=', sidl_import (obj, prefix)))
   return ' '.join (s)
 
 class BoccaCommand (object):
