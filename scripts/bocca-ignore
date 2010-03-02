@@ -1,0 +1,123 @@
+#! /bin/env python
+
+from __future__ import print_function
+
+import subprocess
+import os
+import sys
+import optparse
+import types
+
+class Error (Exception):
+  """Base class for exceptions in this module"""
+  pass
+
+class FileExistsError (Error):
+  """Exception raised for an output file that already exists"""
+  def __init__ (self, file, msg):
+    self.file = file
+    self.msg = msg
+
+class UnknownVCSError (Error):
+  """Exception raised for an unknown version control system"""
+  def __init__ (self, name, msg):
+    self.name = name
+    self.msg = msg
+
+vcs_names = {'GIT': '.gitignore', 'CVS': '.cvsignore', 'SVN': '.ignore'}
+
+def open_ignore_file (vcs, clobber=False):
+  if vcs is None:
+    file = sys.stdout
+  else:
+    if vcs_names.has_key (vcs.upper ()):
+      name = vcs_names[vcs.upper ()]
+    else:
+      raise UnknownVCSError (vcs, 'Unknown version control system')
+
+    if not clobber and os.path.isfile (name):
+      raise FileExistsError (name, 'Ignore-file exists')
+    else:
+      try:
+        file = open (name, 'w')
+      except IOError:
+        raise
+
+  return file
+
+class Verbose (object):
+  def __init__ (self, verbosity=0, log=sys.stderr):
+    if isinstance (verbosity,types.BooleanType):
+      if verbosity is True:
+        self._verbosity = sys.maxint
+      else:
+        self._verbosity = 0
+    else:    
+      self._verbosity = verbosity
+    self._log = log
+  def __call__(self, verbosity, msg):
+    if verbosity <= self._verbosity:
+      print (msg, file=self._log)
+
+parser = optparse.OptionParser ()
+parser.add_option ("-C", "--directory", dest="project_dir", default='.',
+                   help="change to directory, then execute")
+parser.add_option ("-b", "--bocca", dest="bocca", default='bocca',
+                   help="bocca command")
+parser.add_option ("", "--vcs", dest="vcs_name", default=None,
+                   help="name of the version control system")
+parser.add_option ("--clobber",
+                   action="store_true", dest="clobber", default=False,
+                   help="Overwrite an existing file.")
+parser.add_option ("--no-clobber",
+                   action="store_false", dest="clobber", default=False,
+                   help="Do not overwrite an existing file.")
+parser.add_option ("-v", "--verbose",
+                   action="store_true", dest="verbose", default=False,
+                   help="Be verbose with output.")
+
+(options, args) = parser.parse_args ()
+project_dir = options.project_dir
+
+verbose = Verbose (options.verbose)
+
+try:
+  verbose (1, 'Run path: {0}'.format (project_dir))
+  os.chdir (project_dir)
+except OSError as err:
+  sys.exit (err.strerror)
+
+bocca = options.bocca
+bocca_command = ' '.join ([bocca, 'display project -f'])
+
+verbose (1, 'Command: {0}'.format (bocca_command))
+p = subprocess.Popen(bocca_command, shell=True,
+                     stdout=subprocess.PIPE,
+                     stderr=subprocess.PIPE)
+p.wait ()
+
+(stdout, stderr) = p.communicate ()
+if p.poll ()==0:
+  good_files = stdout.split ()
+
+  try:
+    with open_ignore_file (options.vcs_name, options.clobber) as ignore_file:
+      for (root, dirs, files) in os.walk (project_dir):
+        for file in files:
+          test_file = os.path.join (root, file)
+          if os.path.abspath (test_file) not in good_files:
+            print (os.path.normpath (test_file), file=ignore_file)
+      verbose (1, 'Output file: {0}'.format (ignore_file.name))
+
+  except FileExistsError as err:
+    sys.exit ("{0}: {1} (use --clobber to override)".format (err.file, err.msg))
+  except UnknownVCSError as err:
+    sys.exit ("{0}: {1}".format (err.name, err.msg))
+  except IOError as err:
+    sys.exit ("{0}: Error opening ignore file".format (err.filename))
+
+else:
+  print ('%s: Error running bocca: %s'  % (bocca, bocca_command))
+  verbose (1, '%s' % stderr)
+  sys.exit (1)
+
