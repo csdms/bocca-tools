@@ -204,6 +204,22 @@ document = """\
 </project>
 """
 
+class Error (Exception):
+  """Base class for exceptions in this module"""
+  pass
+
+class BadFileError (Error):
+  """Exception raised for error in input files"""
+  def __init__ (self, file, msg):
+    self.file = file
+    self.msg = msg
+
+class ParseError (Error):
+  """Exception raised if an input file has trouble parsing"""
+  def __init__ (self, file, msg):
+    self.file = file
+    self.msg = msg
+
 def parse_project_node (node):
   vars = get_node_vars (node)
 
@@ -419,20 +435,25 @@ def parse_string (string):
   return build
 
 def parse_file (file, srcdir='.'):
-  dom = xml.dom.minidom.parse (file)
-  project = dom.childNodes
-  if len (project)>1:
-    print 'Too many projects!'
-  elif len (project)==0:
-    print 'Not enough projects!'
+  try:
+    dom = xml.dom.minidom.parse (file)
+  except IOError as err:
+    raise BadFileError (file, err.strerror)
   else:
-    project = project[0]
+    project = dom.childNodes
+    if len (project)>1:
+      raise ParseError (file, "XML build file contains more than one project")
+    elif len (project)==0:
+      raise ParseError (file, "XML build file does not contain a project")
+    else:
+      project = project[0]
 
-  build = BoccaBuild (parse_project_node (project))
-  build.set_srcdir (os.path.abspath (srcdir))
-  for node in get_bocca_objects (project):
-    build.add_node (parse_object_node (node))
-  return build
+    build = BoccaBuild (parse_project_node (project))
+    build.set_srcdir (os.path.abspath (srcdir))
+    for node in get_bocca_objects (project):
+      build.add_node (parse_object_node (node))
+
+    return build
   
 #handle_project (dom)
 

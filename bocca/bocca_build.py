@@ -48,11 +48,13 @@ class BoccaCopyFile (BoccaHook):
         shutil.copystat (src, dst)
       except (IOError, os.error), why:
         errors.append((src, dst, str(why)))
-      except WindowsError:
-        # can't copy file access times on Windows
-        pass
       except OSError, why:
         errors.extend((src, dst, str(why)))
+      except Error:
+        errors.extend ((src, dst, 'Source and destination files are the same'))
+      #except WindowsError:
+      #  # can't copy file access times on Windows
+      #  pass
     if errors:
       raise shutil.Error(errors)
 
