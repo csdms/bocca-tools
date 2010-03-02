@@ -13,5 +13,7 @@ setup (name='BoccaTools',
        #packages=find_packages (exclude='tests'),
        packages=['bocca'],
        #package_data={'bocca': 'bocca-build', 'bocca': 'bocca-save'},
-       scripts=['scripts/bocca-build', 'scripts/bocca-save']
+       scripts=['scripts/bocca-build',
+                'scripts/bocca-save',
+                'scripts/bocca-ignore']
       )
