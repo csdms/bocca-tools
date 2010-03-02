@@ -1,15 +1,56 @@
 #! /bin/env python2.6
 
+from __future__ import print_function
+
 import subprocess
 import os
 import sys
 import shutil
 import optparse
 import tarfile
-import commands
 import tempfile
+import types
+
+from commands import getstatusoutput
 
 import bocca.bocca_xml
+from bocca.bocca_xml import BadFileError
+
+def bocca_is_sane (bocca_cmd):
+  (status, output) = getstatusoutput (bocca_cmd+ ' --version')
+  return status == 0
+
+class Verbose (object):
+  def __init__ (self, verbosity=0, log=sys.stderr):
+    if isinstance (verbosity,types.BooleanType):
+      if verbosity is True:
+        self._verbosity = sys.maxint
+      else:
+        self._verbosity = 0
+    else:    
+      self._verbosity = verbosity
+    self._log = log
+  def __call__(self, verbosity, msg):
+    if verbosity <= self._verbosity:
+      print (msg, file=self._log)
+
+example_usage = """
+Build a project based on an existing one:
+  It's probably best to use $HOME as '~' doesn't always get expanded properly.
+
+  > bocca-build --srcdir=$HOME/project_dir ./build.xml
+
+  The source directory is the base directory of a previouse bocca project.
+  That is, a directory created with 'bocca project create'.
+
+Build a project in another directory:
+
+  > bocca-build --srcdir=./project_dir --destdir=$HOME/projects build.xml
+
+  In this case the project will be created under $HOME/projects.  The base
+  directory will be created with 'bocca create project' and it's name will be
+  determined by the project name given in build.xml.
+"""
 
 usage = "usage: make_proj [options] file"
 parser = optparse.OptionParser (usage=usage)
@@ -34,16 +75,27 @@ parser.add_option ('-n', "--dry-run",
 parser.add_option ('-p', "--print-tree",
                    action='store_true', dest='print_tree', default=False,
                    help="Print a tree of what will be built")
+parser.add_option ("-v", "--verbose",
+                   action="store_true", dest="verbose", default=False,
+                   help="Be verbose with output.")
+parser.add_option ("", "--help-examples",
+                   action="store_true", dest="help_examples", default=False,
+                   help="Print some example usages and exit.")
 
 (options, args) = parser.parse_args ()
+
+verbose = Verbose (options.verbose)
+
+if options.help_examples is True:
+  print (example_usage)
+  sys.exit (0)
 
 if len (args)<1:
   parser.error ("no project file")
 build_file = args[0]
 
-(status, output) = commands.getstatusoutput (options.bocca + ' --version')
-if status != 0:
-  sys.exit ("{0}: unable to execute".format (options.bocca))
+if not bocca_is_sane (options.bocca):
+  sys.exit ("{0}: unable to execute bocca".format (options.bocca))
 
 rundir = os.path.abspath (options.rundir)
 try:
@@ -51,30 +103,39 @@ try:
 except IOError as (errno, strerror):
   os.exit ("I/O error ({0}): {1}".format (errno, strerror))
 
+
 build_file = os.path.abspath (build_file)
 
+tmpdir = os.path.abspath (options.tmpdir)
 srcdir = os.path.abspath (options.srcdir)
 dstdir = os.path.abspath (options.dstdir)
+
+verbose (2, "Look for source files in: {0}".format (srcdir))
+verbose (2, "Create project directory in: {0}".format (dstdir))
+verbose (2, "Read from input file: {0}".format (build_file))
 
 try:
   os.chdir (dstdir)
 except OSError:
   sys.exit ("{0}: Error moving to build directory".format (dstdir))
 
-p = bocca.bocca_xml.parse_file (build_file, srcdir=srcdir)
+try:
+  p = bocca.bocca_xml.parse_file (build_file, srcdir=srcdir)
+except BadFileError as err:
+  sys.exit ("{0}: {1}".format (err.file, err.msg))
 
 if os.path.isdir (os.path.join (dstdir, p.name ())):
   if os.path.samefile (srcdir, os.path.join (dstdir, p.name ())):
-    print "{0}: Source and destination are the same".format (srcdir)
-    tmpdir = os.path.abspath (options.tmpdir)
+    verbose (1, "{0}: Source and destination are the same".format (srcdir))
     if tmpdir is None:
       tmpdir = tempfile.mkdtemp (prefix='bocca')
-    print "{0}: Moving source".format (tmpdir)
+    verbose (1, "{0}: Moving source".format (tmpdir))
     shutil.move (srcdir, tmpdir)
     srcdir = os.path.join (tmpdir, p.name ())
+    p.set_srcdir (srcdir)
 
 if options.print_tree:
-  print p
+  print (p)
   sys.exit (0)
 
 if options.dry_run:
