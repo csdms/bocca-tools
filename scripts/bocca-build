@@ -20,6 +20,19 @@ def bocca_is_sane (bocca_cmd):
   (status, output) = getstatusoutput (bocca_cmd+ ' --version')
   return status == 0
 
+def backup_filename (src, dst, suffix='.orig'):
+  """Construct a filename to use as a backup of src in dst.
+  """
+  src = os.path.normpath (src)
+  src_bak = os.path.join (dst, os.path.basename (src) + '.orig')
+  if os.path.exists (src_bak):
+    base = src_bak
+    version = 0
+    while os.path.exists (src_bak):
+      version += 1
+      src_bak = base + '.' + str (version)
+  return src_bak
+
 class Verbose (object):
   def __init__ (self, verbosity=0, log=sys.stderr):
     if isinstance (verbosity,types.BooleanType):
@@ -128,8 +141,9 @@ if os.path.isdir (os.path.join (dstdir, p.name ())):
   if os.path.samefile (srcdir, os.path.join (dstdir, p.name ())):
     verbose (1, "{0}: Source and destination are the same".format (srcdir))
     verbose (1, "{0}: Moving source".format (tmpdir))
-    shutil.move (srcdir, tmpdir)
-    srcdir = os.path.join (tmpdir, p.name ())
+    srcdir_bak = backup_filename (srcdir, tmpdir)
+    shutil.move (srcdir, srcdir_bak)
+    srcdir = srcdir_bak
     p.set_srcdir (srcdir)
 
 if options.print_tree:
