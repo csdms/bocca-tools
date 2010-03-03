@@ -65,7 +65,7 @@ parser.add_option ("-D", "--destdir", dest="dstdir",
                    default=".")
 parser.add_option ("-T", "--tmpdir", dest="tmpdir",
                    help="location of temporary directory",
-                   default=None)
+                   default='.')
 parser.add_option ("-b", "--bocca", dest="bocca",
                    help="bocca command to use",
                    default="bocca")
@@ -127,8 +127,6 @@ except BadFileError as err:
 if os.path.isdir (os.path.join (dstdir, p.name ())):
   if os.path.samefile (srcdir, os.path.join (dstdir, p.name ())):
     verbose (1, "{0}: Source and destination are the same".format (srcdir))
-    if tmpdir is None:
-      tmpdir = tempfile.mkdtemp (prefix='bocca')
     verbose (1, "{0}: Moving source".format (tmpdir))
     shutil.move (srcdir, tmpdir)
     srcdir = os.path.join (tmpdir, p.name ())
