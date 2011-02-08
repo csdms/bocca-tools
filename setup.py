@@ -14,6 +14,7 @@ setup (name='BoccaTools',
        packages=['bocca'],
        #package_data={'bocca': 'bocca-build', 'bocca': 'bocca-save'},
        scripts=['scripts/bocca-build',
+                'scripts/bocca-clone',
                 'scripts/bocca-save',
                 'scripts/bocca-ignore']
       )
