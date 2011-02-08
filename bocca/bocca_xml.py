@@ -434,7 +434,7 @@ def parse_string (string):
     build.add_node (parse_object_node (i))
   return build
 
-def parse_file (file, srcdir='.'):
+def parse_file (file, srcdir='.', no_import=False):
   try:
     dom = xml.dom.minidom.parse (file)
   except IOError as err:
@@ -448,12 +448,41 @@ def parse_file (file, srcdir='.'):
     else:
       project = project[0]
 
-    build = BoccaBuild (parse_project_node (project))
+    build = BoccaBuild (parse_project_node (project), no_import=no_import)
     build.set_srcdir (os.path.abspath (srcdir))
     for node in get_bocca_objects (project):
       build.add_node (parse_object_node (node))
 
     return build
-  
+
+from xml.etree import ElementTree, ElementInclude
+
+def parse (file, srcdir='.', no_import=False):
+  try:
+    doc = ElementTree.parse (file)
+  except IOError as e:
+    raise BadFileError (file, e.strerror)
+    
+  if doc.tag != 'project':
+    raise ParseError (file, 'Build file does not contain a project')
+
+  proj = doc.get_root ()
+
+  build = BoccaBuild (proj.attrib, no_import=no_import)
+  build.set_srcdir (os.path.abspath (srcdir))
+
+  for node in proj.getchildren ():
+    build.add_node (node)
+
+def get_bocca_objects (element):
+  objs = []
+  ElementInclude.include (element)
+  for child in element.getchildren ():
+    if child.tag == 'project':
+      objs.extend (get_bocca_objects (child))
+    elif child.tag in bocca_object_names:
+      objs.append (child)
+  return objs
+
 #handle_project (dom)
 
