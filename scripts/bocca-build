@@ -13,8 +13,8 @@ import types
 
 from commands import getstatusoutput
 
-import bocca.bocca_xml
-from bocca.bocca_xml import BadFileError
+#import bocca.bocca_xml
+#from bocca.bocca_xml import BadFileError
 
 def bocca_is_sane (bocca_cmd):
   (status, output) = getstatusoutput (bocca_cmd+ ' --version')
@@ -79,12 +79,21 @@ parser.add_option ("-D", "--destdir", dest="dstdir",
 parser.add_option ("-T", "--tmpdir", dest="tmpdir",
                    help="location of temporary directory",
                    default='.')
+parser.add_option ("-N", "--rename", dest="rename",
+                   help="Rename the project (override description file)",
+                   default=None)
+parser.add_option ("-o", "--bocca-opts", dest="bocca_opts",
+                   help="Pass comma-separated list of options along to bocca",
+                   default='')
 parser.add_option ("-b", "--bocca", dest="bocca",
                    help="bocca command to use",
                    default="bocca")
 parser.add_option ('-n', "--dry-run",
                    action='store_true', dest='dry_run', default=False,
                    help="Do a dry run (don't actually do anything)")
+parser.add_option ('', "--no-import",
+                   action='store_true', dest='no_import', default=False,
+                   help="Ignore all import requests")
 parser.add_option ('-p', "--print-tree",
                    action='store_true', dest='print_tree', default=False,
                    help="Print a tree of what will be built")
@@ -94,6 +103,12 @@ parser.add_option ("-v", "--verbose",
 parser.add_option ("", "--help-examples",
                    action="store_true", dest="help_examples", default=False,
                    help="Print some example usages and exit.")
+parser.add_option ('', "--new-style",
+                   action='store_true', dest='new_style', default=True,
+                   help="Parse XML as the new style")
+parser.add_option ('', "--old-style",
+                   action='store_false', dest='new_style', default=True,
+                   help="Parse XML as the old style")
 
 (options, args) = parser.parse_args ()
 
@@ -118,6 +133,7 @@ except IOError as (errno, strerror):
 
 
 build_file = os.path.abspath (build_file)
+build_file_dir = os.path.dirname (build_file)
 
 tmpdir = os.path.abspath (options.tmpdir)
 srcdir = os.path.abspath (options.srcdir)
@@ -132,10 +148,28 @@ try:
 except OSError:
   sys.exit ("{0}: Error moving to build directory".format (dstdir))
 
+if options.new_style:
+  from bocca.bocca_xml2 import parse_file
+  from bocca.bocca_xml import BadFileError
+else:
+  from bocca.bocca_xml import parse_file
+  from bocca.bocca_xml import BadFileError
+
 try:
-  p = bocca.bocca_xml.parse_file (build_file, srcdir=srcdir)
+  os.chdir (build_file_dir)
+  p = parse_file (build_file, srcdir=srcdir, dstdir=dstdir,
+                  no_import=options.no_import)
+  os.chdir (dstdir)
 except BadFileError as err:
   sys.exit ("{0}: {1}".format (err.file, err.msg))
+
+if options.rename is not None:
+  p.set_name (options.rename)
+
+if len (options.bocca_opts) > 0:
+  for opt in options.bocca_opts.split (','):
+    (key, sep, val) = opt.partition ('=')
+    p.add_option (key, val)
 
 if os.path.isdir (os.path.join (dstdir, p.name ())):
   if os.path.samefile (srcdir, os.path.join (dstdir, p.name ())):
