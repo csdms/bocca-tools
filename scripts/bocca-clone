@@ -1,0 +1,149 @@
+#! /bin/env python2.6
+
+from __future__ import print_function
+
+import subprocess
+from subprocess import PIPE
+
+import os
+import os.path
+import sys
+import shutil
+import optparse
+import tarfile
+import tempfile
+import types
+import re
+
+from commands import getstatusoutput
+
+from bocca.verbose import Verbose
+from bocca.translate import Translate
+from bocca.shutils import is_sane, exists, copy, touch, impl_files
+from bocca.shutils import RunError
+
+def bocca_rename (files, src, dest, verbose=Verbose ()):
+  import fileinput
+  import re
+  p = re.compile (src)
+
+  f = fileinput.input (files, inplace=1)
+  for line in f:
+    if f.isfirstline ():
+      verbose (1, '%s: %s -> %s' % (os.path.basename (f.filename ()), src, dest))
+    sys.stdout.write (p.sub (dest, line))
+  f.close ()
+
+def bocca_translate (files, dict, verbose=Verbose ()):
+  import fileinput
+  import re
+  p = re.compile (src)
+
+  f = fileinput.input (files, inplace=1)
+  for line in f:
+    if f.isfirstline ():
+      verbose (1, '%s: %s -> %s' % (os.path.basename (f.filename ()), src, dest))
+    sys.stdout.write (p.sub (dest, line))
+  f.close ()
+
+def parse_config (filenames):
+  from ConfigParser import NoSectionError
+  from ConfigParser import RawConfigParser
+
+  config = RawConfigParser ()
+  config.read (filenames)
+
+  dict = {}
+
+  try:
+    options = config.options ('interface')
+    for option in options:
+      dict[option] = config.get ('interface', option)
+  except NoSectionError:
+    sys.stderr.write ('Warning: Missing interface section.\n')
+
+  return dict
+
+example_usage = """
+Clone a bocca class/component:
+
+  > bocca-clone src dest
+
+  Create a clone of the class or component.  Both the source and destination
+  are sidl names to objects within the current bocca project.
+
+"""
+
+usage = "usage: bocca-clone [options] src dest"
+
+parser = optparse.OptionParser (usage=usage)
+parser.add_option ("-C", "--directory", dest="rundir",
+                   help="change to directory, then execute",
+                   default=".")
+
+parser.add_option ("-c", "--config-file", dest="config",
+                   help="Configuration file", action="append",
+                   default=[])
+parser.add_option ("", "--rename", dest="rename",
+                   help="Rename occurances of src in cloned object",
+                   action="store_true", default=True)
+parser.add_option ("", "--no-rename", dest="rename",
+                   help="Do not rename occurances of src in cloned object",
+                   action="store_false", default=False)
+parser.add_option ("-v", "--verbose",
+                   action="count", dest="verbosity",
+                   help="Be verbose with output.")
+
+parser.add_option ("-o", "--bocca-opts", dest="bocca_opts",
+                   help="Pass comma-separated list of options along to bocca",
+                   default='')
+parser.add_option ('-n', "--dry-run",
+                   action='store_true', dest='dry_run', default=False,
+                   help="Do a dry run (don't actually do anything)")
+parser.add_option ("-b", "--bocca", dest="bocca",
+                   help="bocca command to use",
+                   default="bocca")
+
+(options, args) = parser.parse_args ()
+
+verbose = Verbose (options.verbosity)
+
+if not is_sane (options.bocca):
+  sys.exit ("{0}: unable to execute bocca".format (options.bocca))
+
+if len (args)!=2:
+  parser.error ("Need source and destination object names")
+src = args[0]
+dest = args[1]
+
+verbose (1, "Source object: {0}".format (src))
+verbose (1, "Destination object: {0}".format (dest))
+
+rundir = os.path.abspath (options.rundir)
+try:
+  os.chdir (rundir)
+except IOError as (errno, strerror):
+  sys.exit ("I/O error ({0}): {1}".format (errno, strerror))
+
+if not exists (dest):
+  try:
+    copy (src, dest, bocca=options.bocca, verbose=verbose)
+    verbose (1, "Component successfully cloned")
+  except RunError as e:
+    sys.exit ("Error {0}: Unable to clone component: {1}".format (e.status,
+                                                                  e.stderr))
+
+if options.rename:
+  verbose (1, 'Looking for impl files')
+  try:
+    files = impl_files (dest, verbose=verbose)
+  except RunError as e:
+    sys.exit ("Error {0}: Unable to get impl files: {1}".format (
+                                                           e.status, e.stderr))
+  d = parse_config (options.config)
+  d[src] = dest
+  translate = Translate (d)
+  translate.files (files)
+
+  touch (dest, verbose=verbose)
+
