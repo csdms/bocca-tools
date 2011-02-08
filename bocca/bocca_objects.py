@@ -71,7 +71,8 @@ class BoccaObject (object):
     else:
       return self.name ()
   def prepend_name (self, prefix):
-    self._vars['name'] = '.'.join ([prefix, self.name ()])
+    if prefix is not None:
+      self._vars['name'] = '.'.join ([prefix, self.name ()])
 
   def root_dir (self):
     return None
@@ -79,6 +80,9 @@ class BoccaObject (object):
     return None
   def sidl_file (self):
     return None
+
+  def valid_options (self):
+    return ['extras', 'no-merge-buildfiles']
 
 class BoccaProject (BoccaObject):
   def __init__ (self, name, package=None):
@@ -88,6 +92,9 @@ class BoccaProject (BoccaObject):
     self._vars['language'] = []
     self._vars['extras'] = []
 
+  def set_name (self, name):
+    self._vars['name'] = name
+
   def full_name (self):
     return self.name ()
   def language (self):
@@ -96,6 +103,9 @@ class BoccaProject (BoccaObject):
     return os.path.join (prefix, '.')
   def noun (self):
     return "project"
+
+  def valid_options (self):
+    return ['extras', 'no-merge-buildfiles', 'output-dir']
 
 class BoccaInterface (BoccaObject):
   def __init__ (self, name, package=[]):
@@ -114,6 +124,10 @@ class BoccaInterface (BoccaObject):
   def sidl_file (self, prefix=""):
     name = self.full_name ()
     return os.path.join (self.root_dir (prefix), name+'.sidl')
+
+  def valid_options (self):
+    return ['extras', 'requires', 'extends', 'import-sidl',
+            'no-merge-buildfiles']
 
 class BoccaClass (BoccaObject):
   def __init__ (self, name, package=[]):
@@ -135,6 +149,11 @@ class BoccaClass (BoccaObject):
   def impl_dir (self, prefix=""):
     return self.root_dir (prefix)
 
+  def valid_options (self):
+    return ['extras', 'implements', 'requires', 'import-sidl', 'import-impl',
+            'extends', 'no-merge-buildfiles']
+
+
 class BoccaComponent (BoccaClass):
   def __init__ (self, name, package=[]):
     self._vars = {}
@@ -150,13 +169,38 @@ class BoccaComponent (BoccaClass):
   def noun (self):
     return "component"
 
+  def valid_options (self):
+    return ['extras', 'implements', 'requires', 'import-sidl', 'import-impl',
+            'extends', 'no-merge-buildfiles', 'provides', 'uses']
+
 class BoccaPort (BoccaInterface):
   def noun (self):
     return "port"
 
+  def valid_options (self):
+    return ['extras', 'extends', 'requires', 'import-sidl',
+            'no-merge-buildfiles']
+
 class BoccaEnum (BoccaInterface):
   def noun (self):
     return "enum"
+
+  def valid_options (self):
+    return ['extras', 'import-sidl', 'no-merge-buildfiles']
+
+object_creator = { 'interface': BoccaInterface,
+                   'enum': BoccaEnum,
+                   'port': BoccaPort,
+                   'class': BoccaClass,
+                   'component': BoccaComponent,
+                   'project': BoccaProject}
+
+def new_object (name, type):
+  try:
+    obj = object_creator[type] (name)
+  except KeyError as e:
+    raise ObjectTypeError ()
+  return obj
 
 if __name__ == "__main__":
   import doctest
