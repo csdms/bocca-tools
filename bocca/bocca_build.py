@@ -44,8 +44,9 @@ class BoccaCopyFile (BoccaHook):
       try:
         src = os.path.join (obj.root_dir (srcdir), file)
         dst = os.path.join (obj.root_dir (dstdir), file)
-        shutil.copyfile (src, dst)
-        shutil.copystat (src, dst)
+        if os.path.isfile (src):
+          shutil.copyfile (src, dst)
+          shutil.copystat (src, dst)
       except (IOError, os.error), why:
         errors.append((src, dst, str(why)))
       except OSError, why:
@@ -68,11 +69,12 @@ class BoccaCopyFile (BoccaHook):
     return s
 
 class BoccaBuild (object):
-  def __init__ (self, project):
+  def __init__ (self, project, no_import=False):
     self._name = project.name ()
     self._package = project.package ()
     self._language = project.language ()
     self._obj = project
+    self._no_import = no_import
 
     self._srcdir = os.path.abspath ('.')
     self._destdir = os.path.abspath (os.path.join ('.', self._name))
@@ -82,10 +84,18 @@ class BoccaBuild (object):
   def name (self):
     return self._name
 
+  def set_name (self, name):
+    self._name = name
+    self._obj.set_name (name)
+    self._destdir = os.path.join (os.path.dirname (self._destdir), self._name)
   def set_srcdir (self, src):
     self._srcdir = src
   def set_destdir (self, dest):
     self._destdir = dest
+
+  def add_option (self, key, val):
+    for node in self._nodes:
+      node.set_var (key, val)
 
   def add_node (self, node):
     if node is None:
@@ -96,11 +106,12 @@ class BoccaBuild (object):
 
   def run (self):
     stat = StatusMessage ()
-    cp = BoccaCopyFile (self._srcdir,self._destdir)
+    cp = BoccaCopyFile (self._srcdir, self._destdir)
 
     try:
       stat.run ( ': '.join ([self._obj.noun (),self._obj.name ()]),
-        BoccaCommand ('create', self._obj, hook=cp, srcdir=self._srcdir).run)
+        BoccaCommand ('create', self._obj, hook=cp, srcdir=self._srcdir,
+                      no_import=self._no_import).run)
       os.chdir (self._name)
     except RunError as err:
       print ('Error %s: %s' % (err.status, err.stderr))
@@ -113,7 +124,8 @@ class BoccaBuild (object):
       try:
         for node in self._nodes:
           stat.run ( ': '.join ([node.noun (),node.name ()]),
-            BoccaCommand ('create', node, hook=cp, srcdir=self._srcdir).run)
+            BoccaCommand ('create', node, hook=cp, srcdir=self._srcdir,
+                          no_import=self._no_import).run)
       except RunError as err:
         print ('Error %s: %s' % (err.status, err.stderr))
       except:
@@ -129,12 +141,16 @@ class BoccaBuild (object):
     #print (output)
     return status==0
 
-  def dry_run (self):
+  def dry_run (self, no_import=False):
     cp = BoccaCopyFile (self._srcdir,self._destdir)
 
-    BoccaCommand ('create', self._obj, hook=cp, srcdir=self._srcdir).dry_run ()
+    BoccaCommand ('create', self._obj, hook=cp, srcdir=self._srcdir,
+                  no_import=self._no_import).dry_run ()
+    print ('cd %s' % self._name)
+    print ('')
     for node in self._nodes:
-      BoccaCommand ('create', node, hook=cp, srcdir=self._srcdir).dry_run ()
+      BoccaCommand ('create', node, hook=cp, srcdir=self._srcdir,
+                    no_import=self._no_import).dry_run ()
 
   def __str__ (self):
     s = ''
