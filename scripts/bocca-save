@@ -47,7 +47,8 @@ if p.poll ()==0:
     from_file = file[len(prefix):]
     to_file = os.path.join (dest_dir, from_file)
     if not os.path.exists (os.path.dirname (to_file)):
-      shutil.copytree (os.path.dirname(file), os.path.dirname(to_file))
+      os.makedirs (os.path.dirname (to_file))
+      #shutil.copytree (os.path.dirname(file), os.path.dirname(to_file))
     shutil.copyfile (file, to_file)
 
   print "Copied %d files" % len (files)
